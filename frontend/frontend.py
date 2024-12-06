@@ -1,12 +1,16 @@
 # frontend.py
 from flask import Flask, render_template_string, jsonify
 import requests
+import os
 
 app = Flask(__name__)
 
+# Use environment variable for the backend URL
+BACKEND_URL = os.environ.get('BACKEND_URL', 'http://flask-api-service')
+
 @app.route('/')
 def home():
-    response = requests.get('http://flask-api-service.demo-cni-app.svc.cluster.local/api')
+    response = requests.get(f"{BACKEND_URL}/api")
     return render_template_string("""
         <html>
             <body>

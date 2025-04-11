@@ -1,9 +1,10 @@
 name: Release Tagged Images and Version
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["CI → Dev → Release (auto-tag if all pass)"]
+    types:
+      - completed
 
 env:
   REGISTRY: ghcr.io
@@ -12,6 +13,7 @@ env:
 
 jobs:
   release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -19,22 +21,15 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Extract version
-        id: vars
+      - name: Read version from file
+        id: version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "$VERSION" > version
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Commit version file
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add version
-          git commit -m "Update version file to ${{ steps.vars.outputs.VERSION }}"
-          git push origin HEAD:main
+          VERSION=$(cat version)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Login to GHCR
         uses: docker/login-action@v2
@@ -43,32 +38,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push Frontend
+      - name: Build & Push Frontend Image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
           tags: |
-            ${{ env.IMAGE_FRONTEND }}:${{ steps.vars.outputs.VERSION }}
+            ${{ env.IMAGE_FRONTEND }}:${{ steps.version.outputs.version }}
             ${{ env.IMAGE_FRONTEND }}:latest
 
-      - name: Build & Push Backend
+      - name: Build & Push Backend Image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: |
-            ${{ env.IMAGE_BACKEND }}:${{ steps.vars.outputs.VERSION }}
+            ${{ env.IMAGE_BACKEND }}:${{ steps.version.outputs.version }}
             ${{ env.IMAGE_BACKEND }}:latest
 
       - name: Generate release notes
         id: notes
         uses: release-drafter/release-drafter@v5
         with:
-          version: ${{ steps.vars.outputs.VERSION }}
+          version: ${{ steps.version.outputs.version }}
 
-      - name: Create GitHub release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: v${{ steps.vars.outputs.VERSION }}
+          name: v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
           body: ${{ steps.notes.outputs.body }}

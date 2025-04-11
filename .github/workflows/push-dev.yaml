@@ -1,4 +1,4 @@
-name: Push Dev Images
+name: CI → Dev → Release (auto-tag if all pass)
 
 on:
   push:
@@ -11,14 +11,21 @@ env:
   IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/example-application/frontend-demo
 
 jobs:
-  dev-build:
+  test-and-release:
     runs-on: ubuntu-latest
 
     permissions:
+      contents: write
       packages: write
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run tests
+        run: |
+          echo "✅ Running your tests..."
+          ./run-tests.sh
 
       - name: Login to GHCR
         uses: docker/login-action@v2
@@ -27,16 +34,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push Frontend Dev
+      - name: Build & Push Frontend :dev
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
           tags: ${{ env.IMAGE_FRONTEND }}:dev
 
-      - name: Build & Push Backend Dev
+      - name: Build & Push Backend :dev
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: ${{ env.IMAGE_BACKEND }}:dev
+
+      - name: Bump patch version
+        id: bump
+        run: |
+          OLD=$(cat version)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$OLD"
+          NEW="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "$NEW" > version
+          echo "NEW_VERSION=$NEW" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump & tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add version
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.NEW_VERSION }}"
+          git tag v${{ steps.bump.outputs.NEW_VERSION }}
+          git push origin HEAD:main --tags

@@ -64,4 +64,4 @@ jobs:
           git add version
           git commit -m "chore: bump version to ${{ steps.bump.outputs.NEW_VERSION }}"
           git tag v${{ steps.bump.outputs.NEW_VERSION }}
-          git push origin --tags v${{ steps.bump.outputs.NEW_VERSION }}
+          git push origin v${{ steps.bump.outputs.NEW_VERSION }}

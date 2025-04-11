@@ -1,0 +1,74 @@
+name: Release Tagged Images and Version
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/example-application/backend-demo
+  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/example-application/frontend-demo
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Extract version
+        id: vars
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "$VERSION" > version
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit version file
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add version
+          git commit -m "Update version file to ${{ steps.vars.outputs.VERSION }}"
+          git push origin HEAD:master
+
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.IMAGE_FRONTEND }}:${{ steps.vars.outputs.VERSION }}
+            ${{ env.IMAGE_FRONTEND }}:latest
+
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.IMAGE_BACKEND }}:${{ steps.vars.outputs.VERSION }}
+            ${{ env.IMAGE_BACKEND }}:latest
+
+      - name: Generate release notes
+        id: notes
+        uses: release-drafter/release-drafter@v5
+        with:
+          version: ${{ steps.vars.outputs.VERSION }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: v${{ steps.vars.outputs.VERSION }}
+          body: ${{ steps.notes.outputs.body }}

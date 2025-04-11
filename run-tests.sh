@@ -18,7 +18,7 @@ function check_component() {
   echo "✅ Verifying $COMPONENT runs..."
   # If you have an entrypoint, use that — otherwise just check syntax
   if [ -f app.py ]; then
-    python app.py --help || true  # try running it (e.g. Flask or CLI app)
+    python app.py || true  # try running it (e.g. Flask or CLI app)
   else
     python -m compileall .        # just make sure Python code compiles
   fi
